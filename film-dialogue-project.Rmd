@@ -1,0 +1,95 @@
+---
+title: "Film Dialogue Project"
+author: "Micah"
+date: "October 6, 2016"
+output: html_document
+---
+**Note**
+This project uses data taken from Polygraph's Film Dialogue Dataset ([here](https://github.com/matthewfdaniels/scripts/)) which they used in [this](http://polygraph.cool/films/) article. Check it out!!  
+
+They have used movie scripts and data from IMBD to tabulate how many lines each character spoke, as well as the gender and age of the actor when the movie was released, for 2000 movies. This method of data collection has some problems, explained here.  Most importantly, they do not consider characters with less than 100 lines of dialogue.
+
+As part of this exploration, I will be labeling characters as 'main' or 'supporting' characters, based on the percentage of lines in the movie they speak. This is obviously only a proxy for how characters should be considered, and fails for certain movies. For example, In 2015's Ex Machina, there are four important characters, one of whom, 'Kyoko', never speaks. Yet, at least in the available script, the male helicopter pilot 'Jay' says enough words to pass the threshold (159), so our analysis. (more examples). Nonetheless, it is a useful as simple tool for evaluating relative trends in movie scripts.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r libraries_and_data, message=FALSE }
+library('dplyr')
+library('ggplot2')
+df = read.csv('~/GitHub/Film-Dialogue-Project/scripts-graphs/character_list5.csv', stringsAsFactors = FALSE)
+dfmeta = read.csv('~/GitHub/Film-Dialogue-Project/scripts-graphs/meta_data7.csv', stringsAsFactors = FALSE)
+df$age[df$age=='NULL'] = NA
+df = df[order(df$script_id,df$gender,df$words, decreasing = TRUE), ] 
+rownames(df)=NULL
+#head(df,11)
+movies = dfmeta[order(dfmeta$year, decreasing = TRUE),]
+movies = select(movies, -imdb_id, -lines_data)
+rownames(movies)=NULL
+#head(movies)
+
+# dfall = inner_join(df,dfmeta, by = "script_id")
+# df = select(dfall, script_id, title, year, imdb_character_name:age,gross)
+
+#for (var in df) print(sum(is.na(var)))
+#age has 4785 NAs and gross has 3661
+#head(df,2)
+# variables:  "script_id" "title" "year" "imdb_character_name" "words" "gender" "age" "gross" 
+ movie_info = function(id) filter(df, script_id==id)
+```
+
+This data is sorted by script_id (desc), character gender, character words (desc), so it is easy to pick out the relative words spoken by each gender in a movie and who the main characters are. For example 
+```{r comment=""} 
+head(df,11)
+```
+
+Here we see the characters for Disney's Beauty And The Beast, where Belle is the female with the most lines and Cogsworth (the clock) is the male with the most lines. Using word count as a guide, it looks like Belle, Cogsworth, Gaston, Beast, Maurice, and Lumiere (the candlestick) are all main characters. 
+
+## Modified Bechdell test criteria #1
+Since we have not included characters with less than 100 words of dialogue, our modified Bechdell test criteria #1 is that the movie must have:
+
+> at least two women {who say more than 100 words}
+
+Often a requirement that the characters be 'named' is added as well, but I think requiring 100 or greater lines is a pretty good proxy, maybe a better representation of whether the role should be considered a 'supporting character'. For example, 2015's Beasts of No Nation has one unnamed character, 'mother', who has 1.54% of the dialogue, similar to 2015's Bridge Of Spies who's one female character, 'Mary Donovan', has 2.93% of the dialogue .
+
+Lets see how these movies hold up. However, a more meaningful comparison might be the percentage of female roles in the film, or the percent of female dialogue, so we will include those as well.
+this code gives you the data for any particular movie
+> filter(df, script_id==7716)
+
+```{r Bechdel_test_1, comment=""}
+scripts = movies$script_id
+bech = data.frame(script_id = scripts, passedB1 = FALSE, percent_f = 0, cast_size = 0, dialogue = 0 )
+for (i in 1:length(scripts)) {
+  m = filter(df,script_id==scripts[i])
+  if (sum(m$gender=='f')>=2) bech$passedB1[i] = TRUE
+  bech$percent_f[i] = round(100*sum(m$gender=='f')/nrow(m), digits = 2)
+  bech$cast_size[i] = nrow(m)
+  bech$dialogue[i] = round(100*sum(m$words['f'==m$gender])/sum(m$words), digits = 2)
+}
+
+movies = inner_join(movies,bech, by = 'script_id')
+head(movies,40)
+
+
+```
+Just because a movie doesn't have 2 women (who speak over 100 words) doesn't mean there isn't female representation. 2015's Terminator Genisys has only one female out of 11 characters, but speaks 26% of the dialogue. That must be meaningfully different than the two movies noted above.
+
+
+
+GRAPH % that pass Bechtest and Percent of cast female and percent dialogue by year
+
+```{r graphs1, echo=FALSE}
+years = sort(unique(movies$year))
+year_summary=data.frame(summarize(group_by(movies, year), n=n(),avg_percent_f=mean(percent_f),avg_dialogue = mean(dialogue), percent_pass_B1 = mean(passedB1)))
+ggplot(year_summary) +geom_point(aes(year,avg_percent_f, size = n, color = 'plum1')) +scale_fill_continuous(low = "plum1", high = "purple4")
+
+geom_segment(aes(year_summary$year,year_summary$avg_percent_f))
+
+```
+
+Next, decide who is or isn't a main character, then figure out that ratio.
+
+Then, study the subset of movies with only one main character, and see if they pass the Main Character test (only if you can get your hand on the scripts)
